@@ -1,0 +1,354 @@
+---
+title: "ngsgenotype_snp"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Detect, load and clean files and genotypes:
+```{r}
+# Load libraries:
+library(tidyverse)
+library(ShortRead)
+library(wesanderson)
+source("genotyping_functions.r")
+
+# Load all samples and mark controls and duplicates: # some negatives and positives are summarized if they are named the same(?)
+allGenotypes <- ParseGenotypes(genotypePath = "Genotyped_SNPs/")
+
+# Remove duplicates and controls:
+allGenotypes <- allGenotypes[allGenotypes$Status != "Duplicated", ] # no duplicated names are allowed past this point
+allGenotypes <- allGenotypes[allGenotypes$Status != "Control", ] # no controls are allowed past this point
+
+# Separate autosomal genotypes and sexual genotypes if there are no repeated names:
+if(!any(duplicated(allGenotypes$Sample))) {
+  sexString <- "X-*|Y-*"
+  autoGenotypes <- allGenotypes[, !grepl(sexString, colnames(allGenotypes))]
+  saveRDS(autoGenotypes, file = "autoGenotypes.rds")
+  sexGenotypes <- cbind(Sample = allGenotypes$Sample, allGenotypes[, grepl(sexString, colnames(allGenotypes))])
+  saveRDS(sexGenotypes, file = "sexGenotypes.rds")
+} else {
+  cat("Error: allGenotypes contains repeated sample names.")
+}
+```
+
+# Filter/QC samples and loci:
+```{r}
+# Mark samples based on quality:
+QCGenotypes <- QCMarking(autoGenotypes, minPresent = 75, targetStatus = c("Loaded"), newStatus = "High Quality") %>%
+  QCMarking(minPresent = 67, maxPresent = 74, targetStatus = c("Loaded"), newStatus = "Medium Quality") %>%
+  QCMarking(minPresent = 24, maxPresent = 66, targetStatus = c("Loaded"), newStatus = "Low Quality") %>%
+  QCMarking(minPresent = 00, maxPresent = 23, targetStatus = c("Loaded"), newStatus = "Fail Quality") # perhaps use a more comprehensive function and collapse this into one line
+
+# Quick overview of quality of samples:
+table(QCGenotypes$Status)
+```
+
+# Cluster all working samples (>= 67 working loci) and identify samples/clusters to be removed:
+```{r}
+library(allelematch)
+
+# Make new object:
+processedGenotypes <- QCGenotypes
+
+# Cluster all samples with sufficient quality:
+loadedDataAll <- LoadAMData(processedGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
+
+{png(file="amUniqueProfile_plot_All.png", width = 689, height = 425)
+amProfileAll <- allelematch::amUniqueProfile(amDatasetFocal = loadedDataAll$Data, multilocusMap = loadedDataAll$AlleleKey, doPlot = TRUE, alleleMismatch = c(0:45))
+dev.off()
+saveRDS(amProfileAll, file = "amProfileAll.rds")
+mmCutoff <- amProfileAll$alleleMismatch[amProfileAll$guessOptimum]}
+
+uniqueBearsAll <- allelematch::amUnique(loadedDataAll$Data, multilocusMap = loadedDataAll$AlleleKey, alleleMismatch = mmCutoff)
+allelematch::summary.amUnique(object = uniqueBearsAll, html = paste0("unique_bears_all_", mmCutoff, "_v1.html"))
+allelematch::summary.amUnique(object = uniqueBearsAll, csv = paste0("unique_bears_all_", mmCutoff, "_v1.csv"))
+
+# get clusters and high quality individuals:
+clustersAll <- lapply(uniqueBearsAll$pairwise, function(x) {x$match$index})
+samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # should this be placed after marking unclassified/multiplematched? To avoid to not keep orphans by mistake?
+
+# check each one and see if they contain any matched sample from '75' run, note all samples in any who doesn't
+GetOrphans <- function(hiqSamples, allClusters) {
+  rmSamples <- c()
+  for(curCluster in allClusters) {
+    if(!any(curCluster %in% hiqSamples)) {
+      rmSamples <- c(rmSamples, curCluster)
+    }
+  }
+  return(unique(c(rmSamples, "0_EMPTY_NAME"))) # return orphaned samples
+}
+
+# Mark unclassified and multiplematched samples from all run:
+processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$unclassified$index] <- "Unclassified"
+processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$multipleMatches$index] <- "MultipleMatched"
+
+# Get orphaned samples and mark them:
+print(length(GetOrphans(hiqSamples = samples75, allClusters = clustersAll))) # number of newly added samples to be removed
+processedGenotypes$Status[processedGenotypes$Sample %in% GetOrphans(samples75, clustersAll)] <- "Orphan"
+```
+
+# Recluster without samples chosen to be removed:
+```{r}
+# Make new object:
+finalGenotypes <- processedGenotypes
+
+# Rerun analysis without noted samples:
+loadedDataFilt <- LoadAMData(finalGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
+uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = loadedDataFilt$AlleleKey, alleleMismatch = mmCutoff) # use stringent 10
+
+# Save results as report as well as csv-file:
+allelematch::summary.amUnique(object = uniqueBearsFilt, html = paste0("unique_bears_filt_", mmCutoff, "_v1.html"))
+allelematch::summary.amUnique(object = uniqueBearsFilt, csv = paste0("unique_bears_filt_", mmCutoff, "_v1.csv"))
+
+# Check if there are orphans still:
+print(GetOrphans(hiqSamples = samples75, allClusters = lapply(uniqueBearsFilt$pairwise, function(x) {x$match$index}))) # make sure that there are no orphans
+
+# Quick overview of statuses of samples:
+table(finalGenotypes$Status)
+```
+
+# Calculate sex and generate statistics output: (remove?)
+```{r}
+sexGenotypes$Status <- finalGenotypes$Status[match(sexGenotypes$Sample, finalGenotypes$Sample)]
+sexDetClusters <- sexGenotypes[sexGenotypes$Status %in% c("Medium Quality", "High Quality"),]
+sexDetClusters$Cluster <- bearsFiltResult$uniqueIndex[match(sexDetClusters$Sample, bearsFiltResult$matchIndex)]
+
+SexChooser <- function(clusterName, inputDF, minimumX = 1, minimumY = 3) {
+  curMarkers <- inputDF[inputDF$Cluster == clusterName, ]
+  curMarkers[rowSums(curMarkers[grep("^X", colnames(curMarkers))] == "") == 3, ] <- "" #rep("", ncol(curMarkers))
+  presentX <- any(rowSums(curMarkers[grep("^X", colnames(curMarkers))] != "") >= minimumX)
+  presentY <- any(rowSums(curMarkers[grep("^Y", colnames(curMarkers))] != "") >= minimumY)
+  if(presentY) {
+    SNPSex <- "Hane"
+  } else if(presentX) {
+    SNPSex <- "Hona"
+  } else {
+    SNPSex <- "Obestämd"
+  }
+  return(data.frame(Cluster = clusterName, SNP_sex = SNPSex))
+}
+
+bearSexList <- lapply(unique(sexDetClusters$Cluster), SexChooser, sexDetClusters, minimumX = 1, minimumY = 3) # minimum 1 X to get determined, minimum 3 Y to be a male
+bearSexSummary <- do.call(rbind, bearSexList)
+sexDetClusters$SNP_Sex <- bearSexSummary$SNP_sex[match(sexDetClusters$Cluster, bearSexSummary$Cluster)]
+table(sexDetClusters$SNP_Sex) # summarise sex of samples
+statisticsOutFile <- cbind(sexDetClusters[, -c(8)], QCGenotypes[match(sexDetClusters$Sample, QCGenotypes$Sample), -c(1, 2)]) 
+writexl::write_xlsx(x = statisticsOutFile, path = "clustered_bear_samples_id_sex_genotypes_v1.xlsx")
+```
+
+# Rovbase input functions:
+```{r}
+SexChooser <- function(clusterName, martinDF, minimumX = 1, minimumY = 3) {
+  curMarkers <- martinDF[martinDF$Cluster == clusterName, ]
+  curMarkers[rowSums(curMarkers[grep("^X", colnames(curMarkers))] == "") == 3, ] <- "" # set all columns to nothing in case no X markers are present
+  presentX <- any(rowSums(curMarkers[grep("^X", colnames(curMarkers))] != "") >= minimumX)
+  presentY <- any(rowSums(curMarkers[grep("^Y", colnames(curMarkers))] != "") >= minimumY)
+  if(presentY) {
+    SNPSex <- "Hane"
+  } else if(presentX) {
+    SNPSex <- "Hona"
+  } else {
+    SNPSex <- "Obestämd"
+  }
+  return(data.frame(Cluster = clusterName, SNP_sex = SNPSex))
+}
+
+DetermineID <- function(allClusters, outDF, bearSexMeta = sexedBearIDs, SSRDataBecky = SSRDatabase) {
+  curClust <- allClusters[1]
+  remClusters <- allClusters[-1]
+  print(curClust)
+  testCluster <- bearSexMeta$Sample[bearSexMeta$Cluster == curClust]
+  testIds <- SSRDataBecky$individ[SSRDataBecky$index %in% testCluster] # try with one with several SSR samples
+  if(length(testIds) == 1) { # if one name found
+    outName <- testIds
+  } else if(length(testIds > 1)) {
+    if(length(unique(testIds)) == 1) { # if all names the same
+      outName <- testIds[1]
+    } else {
+      outName <- "0_MULTIPLE_NAMES" # if cluster has multiple different SSR IDs
+    }
+  } else { # if the cluster had no SSR name (new or otherwise)
+    outName <- "0_NO_NAME"
+  }
+  # Check if name is repeated, and if so handle:
+  if(outName %in% outDF$ID[grepl("^BI|^NRM_", outDF$ID)]) { # if name exists already
+    otherCluster <- outDF$Cluster[outDF$ID == outName]
+    otherSize <- sum(bearSexMeta$Cluster %in% otherCluster, na.rm = TRUE)
+    currSize <- sum(bearSexMeta$Cluster %in% curClust, na.rm = TRUE)
+    if(currSize > otherSize) { # if current cluster has more samples
+      outDF$ID[outDF$Cluster == otherCluster] <- "0_REPEATED_NAME" # name is kept for current and the other is changed
+    } else {
+      outName <- "0_REPEATED_NAME" # current cluster gets the new name since it is smaller
+    }
+  }
+  # Check if to recurse or return final output:
+  if(length(remClusters) > 0) {
+    DetermineID(remClusters, rbind(outDF, data.frame(Cluster = curClust, ID = outName)), bearSexMeta = bearSexMeta)
+  } else {
+    return(rbind(outDF, data.frame(Cluster = curClust, ID = outName)))
+  }
+} # failed bears are not handled well by this, BEAR gets multiple names tag for some reason
+
+SexChooserSample <- function(sampleName, allDataDF, minimumX = 1, minimumY = 3) {
+  sampleRow <- allDataDF[allDataDF$Sample == sampleName, ]
+  # sampleRow <- as.data.frame(sampleRow)
+  # sampleRow[is.na(sampleRow)] <- ""
+  # print(sampleRow)
+  sampleRow[rowSums(sampleRow[grep("^X", colnames(sampleRow))] == "") == 3, ] <- ""  # set all columns to nothing in case no X markers are present
+  presentX <- any(rowSums(sampleRow[grep("^X", colnames(sampleRow))] != "") >= minimumX)
+  presentY <- any(rowSums(sampleRow[grep("^Y", colnames(sampleRow))] != "") >= minimumY)
+  if(presentY) {
+    SNPSex <- "Hane"
+  } else if(presentX) {
+    SNPSex <- "Hona"
+  } else {
+    SNPSex <- "Obestämd"
+  }
+  return(SNPSex)
+}
+
+GenerateLopnummer <- function(clusterNames, allData, startNumber, lansbokstav, yearYY, outDF = data.frame(), deadStartNumber) {
+  # clusterName <- as.character(clusterNames[1])
+  clusterName <- clusterNames[1]
+  remClusters <- clusterNames[-1]
+  curSamples <- allData$Sample[allData$ID_ref == clusterName]
+  if(startsWith(unique(sexedBearIDs$ID_ref[sexedBearIDs$ID_ref == clusterName]), "BI")) {
+    outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = ""))
+    newNumber <- startNumber
+    newDeadNumber <- deadStartNumber
+  } else {
+    if(any(startsWith(curSamples, "M"))) {
+      outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = paste0("B", deadStartNumber, "+")))
+      newNumber <- startNumber
+      newDeadNumber <- deadStartNumber + 1
+    } else {
+      outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = paste0(lansbokstav, yearYY, "-", startNumber)))
+      newNumber <- startNumber + 1
+      newDeadNumber <- deadStartNumber
+    }
+  }
+  if(length(remClusters) > 0) {
+    GenerateLopnummer(clusterNames = remClusters, allData = allData, startNumber = newNumber, lansbokstav = lansbokstav, yearYY = yearYY, outDF = outDF, deadStartNumber = newDeadNumber)
+  } else {
+    return(outDF)
+  }
+}
+```
+
+# Rovbase object creation:
+```{r}
+# Make new object and load metadata:
+exportGenotypes <- finalGenotypes
+SSRDatabase <- as.data.frame(read.table("../../../bears/bear_genotyping_2025/snp_genotyping_2025/SSR_database/newdb.csv", sep = ',', header = TRUE)) # SSR database for tissues and previously non working cluster samples
+rovbaseMetaData <- as.data.frame(readxl::read_xlsx("../rovbase_metadata.xlsx"))
+zombieBears <- c() # specify zombie bear sample names
+
+# Remove geoproblems:
+# geoProblems <- as.data.frame(readxl::read_xlsx("../GeoQC.xlsx"))
+# geoProblems[is.na(geoProblems)] <- ""
+# exportGenotypes$Status[exportGenotypes$Sample %in% geoProblems$Sample[geoProblems$Action == "Only bear"]] <- "Manual Removal"
+
+# Generate individual sex:
+bearsFiltResult <- read.table(paste0("unique_bears_filt_", mmCutoff, "_v1.csv"), sep = ",", header = TRUE)
+sexGenotypes$StatusFinal <- exportGenotypes$Status[match(sexGenotypes$Sample, exportGenotypes$Sample)]
+sexedBearIDs <- sexGenotypes[sexGenotypes$StatusFinal %in% c("Medium Quality", "High Quality"),]
+sexedBearIDs$Cluster <- bearsFiltResult$uniqueIndex[match(sexedBearIDs$Sample, bearsFiltResult$matchIndex)]
+bearSexListRB <- lapply(unique(sexedBearIDs$Cluster), SexChooser, sexedBearIDs, minimumY = 3) # minimum 3 Y to be a male
+bearSexSummaryRB <- do.call(rbind, bearSexListRB)
+sexedBearIDs$SNP_Sex <- bearSexSummaryRB$SNP_sex[match(sexedBearIDs$Cluster, bearSexSummaryRB$Cluster)]
+
+# Get SSR IDs, handle zombie bears and generate NRM-names for new individuals:
+identityDF <- DetermineID(unique(sexedBearIDs$Cluster), data.frame(Cluster = c(), ID = c()))
+zombieClusters <- sexedBearIDs$ClusterNum[sexedBearIDs$Sample %in% zombieBears] # get zombie clusters
+identityDF$ID[identityDF$Cluster %in% zombieClusters] <- "0_REPEATED_NAME" # give zombie clusters repeated name IDs
+nrmNumStart <- sort(as.numeric(gsub("NRM_", "", SSRDatabase$individ[grepl("^NRM_", SSRDatabase$individ)])), decreasing = TRUE)[1] + 1 # get nrm name start
+nrmNamesNew <- paste0("NRM_", nrmNumStart:(nrmNumStart + sum(identityDF$ID == "0_REPEATED_NAME", na.rm = TRUE) - 1)) # generate new nrm names
+identityDF$ID[identityDF$ID == "0_REPEATED_NAME"] <- nrmNamesNew # give nrm names to clusters with repeated names
+sexedBearIDs$ID_ref <- identityDF$ID[match(sexedBearIDs$Cluster, identityDF$Cluster)] # match IDs with clusters
+sexedBearIDs$ID_ref <- as.character(sexedBearIDs$ID_ref) # cast it as character since it is a weird form of character (read_xlsx?)
+
+# Handle clusters split by SSR (by trusting SSR):
+sexedBearIDs$ID_ref[sexedBearIDs$ID_ref == '0_MULTIPLE_NAMES'] <- SSRDatabase[match(sexedBearIDs$Sample[sexedBearIDs$ID_ref == '0_MULTIPLE_NAMES'], SSRDatabase$index), 8] # split multiple names cluster
+
+# Fix 0_NO_NAMES:
+exportGenotypes$Status[exportGenotypes$Sample %in% sexedBearIDs$Sample[sexedBearIDs$ID_ref == "0_NO_NAME"]] <- "No SSR Representative"
+sexedBearIDs <- sexedBearIDs[!(sexedBearIDs$ID_ref == "0_NO_NAME"), ]
+
+# Generate sample sex:
+sexedBearIDs$Sample_sex <- lapply(sexedBearIDs$Sample, SexChooserSample, sexedBearIDs)
+
+# Generate year found:
+sexedBearIDs$YearFound <- unlist(lapply(rovbaseMetaData$Funnetdato[match(sexedBearIDs$Sample, rovbaseMetaData$`Strekkode (Prøve)`)], function(x) {strsplit(as.character(x), "-")[[1]][1]}))
+
+# Figure out highest löpnummer for new individuals found dead:
+rovbaseNamesLop <- unlist(lapply(strsplit(rovbaseMetaData$Individ, " "), `[`, 2))
+rovbaseNamesLop[is.na(rovbaseNamesLop)] <- ""
+rovbaseNamesLopDead <- max(as.numeric(gsub("B", "", rovbaseNamesLop[grepl("^B\\d+", rovbaseNamesLop)]))) + 1
+
+# Generate sample fylke:
+sexedBearIDs$Fylke <- rovbaseMetaData$Fylke[match(sexedBearIDs$Sample, rovbaseMetaData$`Strekkode (Prøve)`)]
+sexedBearIDs$Fylke[is.na(sexedBearIDs$Fylke)] <- ""
+
+# Generate löpnummer:
+lopnummerDF1 <- GenerateLopnummer(clusterNames = unique(sexedBearIDs$ID_ref[sexedBearIDs$Fylke == "Västernorrlands län (S)"]), allData = sexedBearIDs, startNumber = 1, lansbokstav = "Y", yearYY = "25", deadStartNumber = rovbaseNamesLopDead) # Västernorrland
+
+lopnummerDF2 <- GenerateLopnummer(clusterNames = unique(sexedBearIDs$ID_ref[sexedBearIDs$Fylke != "Västernorrlands län (S)"]), allData = sexedBearIDs, startNumber = 1, lansbokstav = "PROBLEM", yearYY = "25", deadStartNumber = max(as.numeric(gsub("B|\\+", "", lopnummerDF1$Lopnummer[grepl("^B\\d+\\+", lopnummerDF1$Lopnummer)]))) + 1) # everything else
+
+lopnummerDF <- rbind(lopnummerDF1, lopnummerDF2)
+sexedBearIDs$Löpnummer <- lopnummerDF$Lopnummer[match(sexedBearIDs$ID_ref, lopnummerDF$ID_ref)]
+
+# Remove NA values
+sexedBearIDs[is.na(sexedBearIDs)] <- ""
+```
+
+# Generate Rovbase input files:
+```{r}
+### Working samples (tissues and scats):
+## Generate rovbaseIndividDF:
+rovbaseIndividDF <- sexedBearIDs[!duplicated(sexedBearIDs$ID_ref) & grepl("NRM_", sexedBearIDs$ID_ref), ]
+rovbaseIndividDF <- cbind(ArtsID = "3", Individnavn = rovbaseIndividDF$Löpnummer, KjønnID = rovbaseIndividDF$SNP_Sex, Dødsår = rovbaseIndividDF$YearFound, Merknad = "")
+rovbaseIndividDF <- as.data.frame(rovbaseIndividDF)
+
+## Generate rovbaseInputWorking:
+rovbaseInputWork <- cbind(DNAID = "", Strekkode = sexedBearIDs$Sample, RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = ifelse(sexedBearIDs$Sample_sex == "Hane", "1", ifelse(sexedBearIDs$Sample_sex == "Hona", "2", "3")), MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = gsub("NRM_.+", "", sexedBearIDs$ID_ref), IndividNavn = sexedBearIDs$Löpnummer, ReferanseID = "", Referansetekst = "")
+rovbaseInputWork <- as.data.frame(rovbaseInputWork)
+
+### Bear-only samples (non-working but identified as bear):
+{rovbaseInputBear <- exportGenotypes[!(exportGenotypes$Status %in% c("Control", "Fail Quality", "Medium Quality", "High Quality", "Exclude")), ] # remove all control, fully failed or working samples
+rovbaseInputBear <- cbind(DNAID = "", Strekkode = rovbaseInputBear[, "Sample"], RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = "3", MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = "", IndividNavn = "", ReferanseID = "", Referansetekst = "")}
+rovbaseInputBear <- as.data.frame(rovbaseInputBear)
+
+### Failed samples:
+{rovbaseInputFail <- exportGenotypes[exportGenotypes$Status == "Fail Quality", ] # extract failed samples
+rovbaseInputFail <- cbind(DNAID = "", Strekkode = rovbaseInputFail[, "Sample"], RovbaseID = "", ArtsID = "14", PrøvestatusID = "2", KjønnID = "3", MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = "", IndividNavn = "", ReferanseID = "", Referansetekst = "")}
+rovbaseInputFail <- as.data.frame(rovbaseInputFail)
+```
+
+# QC before final delivery:
+```{r}
+# RovbaseIndividDF:
+length(rovbaseIndividDF$Individnavn) == length(unique(rovbaseIndividDF$Individnavn)) # is every Individnavn unique?
+length(rovbaseIndividDF$Individnavn) 
+length(unique(rovbaseIndividDF$Individnavn))
+
+# All names written to outputs:
+allOutputNames <- c(rovbaseInputWork$Strekkode, rovbaseInputBear$Strekkode, rovbaseInputFail$Strekkode)
+
+length(exportGenotypes$Sample) # number of samples in
+length(allOutputNames) # number of samples out
+length(unique(allOutputNames)) # number of unique samples out
+View(exportGenotypes[!(exportGenotypes$Sample %in% allOutputNames),]) # did we lose any samples that should be kept?
+
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputWork$Strekkode)]) # statuses of working samples
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputBear$Strekkode)]) # statuses of only-bear samples
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputFail$Strekkode)]) # statuses of failed samples
+```
+
+# Write output:
+```{r}
+writexl::write_xlsx(rbind(rovbaseInputWork, rovbaseInputBear, rovbaseInputFail), "../Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
+writexl::write_xlsx(rovbaseIndividDF, "../Analysresultat_björn_20XX_rovbase_nya_individ_v1_raw.xlsx")
+```
