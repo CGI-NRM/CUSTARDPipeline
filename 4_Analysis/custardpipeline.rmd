@@ -16,7 +16,7 @@ library(wesanderson)
 source("genotyping_functions.r")
 
 # Load all samples and mark controls and duplicates: # some negatives and positives are summarized if they are named the same(?)
-allGenotypes <- ParseGenotypes(genotypePath = "Genotyped_SNPs/")
+allGenotypes <- ParseGenotypes(genotypePath = "../3_Genotyped_SNPs/")
 
 # Remove duplicates and controls:
 allGenotypes <- allGenotypes[allGenotypes$Status != "Duplicated", ] # no duplicated names are allowed past this point
@@ -56,7 +56,7 @@ processedGenotypes <- QCGenotypes
 # Cluster all samples with sufficient quality:
 loadedDataAll <- LoadAMData(processedGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
 
-{png(file="amUniqueProfile_plot_All.png", width = 689, height = 425)
+{png(file="Outputs/amUniqueProfile_plot_All.png", width = 689, height = 425)
 amProfileAll <- allelematch::amUniqueProfile(amDatasetFocal = loadedDataAll$Data, multilocusMap = loadedDataAll$AlleleKey, doPlot = TRUE, alleleMismatch = c(0:45))
 dev.off()
 saveRDS(amProfileAll, file = "amProfileAll.rds")
@@ -136,7 +136,7 @@ bearSexSummary <- do.call(rbind, bearSexList)
 sexDetClusters$SNP_Sex <- bearSexSummary$SNP_sex[match(sexDetClusters$Cluster, bearSexSummary$Cluster)]
 table(sexDetClusters$SNP_Sex) # summarise sex of samples
 statisticsOutFile <- cbind(sexDetClusters[, -c(8)], QCGenotypes[match(sexDetClusters$Sample, QCGenotypes$Sample), -c(1, 2)]) 
-writexl::write_xlsx(x = statisticsOutFile, path = "clustered_bear_samples_id_sex_genotypes_v1.xlsx")
+writexl::write_xlsx(x = statisticsOutFile, path = "Outputs/clustered_bear_samples_id_sex_genotypes_v1.xlsx")
 ```
 
 # Rovbase input functions:
@@ -349,6 +349,6 @@ table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputFail$Strek
 
 # Write output:
 ```{r}
-writexl::write_xlsx(rbind(rovbaseInputWork, rovbaseInputBear, rovbaseInputFail), "../Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
-writexl::write_xlsx(rovbaseIndividDF, "../Analysresultat_björn_20XX_rovbase_nya_individ_v1_raw.xlsx")
+writexl::write_xlsx(rbind(rovbaseInputWork, rovbaseInputBear, rovbaseInputFail), "Outputs/Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
+writexl::write_xlsx(rovbaseIndividDF, "Outputs/Analysresultat_björn_20XX_rovbase_nya_individ_v1_raw.xlsx")
 ```
