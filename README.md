@@ -43,23 +43,38 @@ uv run ./merge_all_pairs.sh
 This will create a log file and write merged files into `CUSTARDPipeline/1_Merged_data/`
 
 ## Step 2 - Trim data
+
+### Trim primers
 In order to trim the data in your `CUSTARDPipeline/1_Merged_data/` you use slightly different settings depending on previous choices.
 
-### Data not in chunks and paired-ended
+#### Data not in chunks and paired-ended
 ```bash
 cd CUSTARDPipeline/2_Filtered_data/ # move into correct directory
 uv run ./trim_all_primers.sh merged Primers/Bear_SNP_all_loci_current.fa
 ```
 
-### Data not in chunks and single-ended
+#### Data not in chunks and single-ended
 ```bash
 cd CUSTARDPipeline/2_Filtered_data/ # move into correct directory
 uv run ./trim_all_primers.sh single Primers/Bear_SNP_all_loci_current.fa
 ```
 
-### Data in chunks and paired-ended
+#### Data in chunks and paired-ended
 First edit `run_individual_chunks.sh` and uncomment/modify which chunks to run.
 ```bash
 cd CUSTARDPipeline/2_Filtered_data/ # move into correct directory
 uv run ./run_individual_chunks.sh
+```
+
+### Trim SNPs
+
+#### Data not in chunks
+```bash
+uv run ./filter_out_SNPs.sh
+```
+
+#### Data in chunks
+First edit `run_individual_chunks_SNPs.sh` and uncomment/modify which chunks to run.
+```bash
+uv run ./run_individual_chunks_SNPs.sh
 ```
