@@ -72,7 +72,7 @@ all_samples = list(set([i.split('_')[2].split('-')[0] for i in all_fastq_files])
 
 # Load loci print order:
 full_loci_list = []
-with open('../bear_snp_loci.csv') as bear_snp_csv:
+with open('./bear_snp_loci.csv') as bear_snp_csv:
     for locus in bear_snp_csv:
         full_loci_list.append(locus.strip())
 

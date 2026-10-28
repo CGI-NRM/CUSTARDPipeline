@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Usage (note, it assumes that subfolders are prefixed with "chunk_"):
 # bash loop_over_chunks.sh ../Filtered_data/
 
