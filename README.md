@@ -1,5 +1,5 @@
 # CUSTARDPipeline
-CGI Ursus SNP-based Trimming Analysing Recording and Documenting Pipeline
+**C**GI **U**rsus **S**NP-based **T**rimming **A**nalysing **R**ecording and **D**ocumenting **Pipeline**
 
 ## Dependecies
 Step 1 requires that there is a folder in the users home directory called `tools` and that it contains the BBTools package (silly, I know). You can make this happen by doing the following:
