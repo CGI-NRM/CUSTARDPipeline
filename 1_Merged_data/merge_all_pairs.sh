@@ -1,6 +1,8 @@
+#!/bin/bash
+
 # Merge all pair in ../0_Raw_data, both in main folder and separated into "chunk_*"-folders
 # Usage:
-# bash merge_all_pairs.sh
+# $ bash merge_all_pairs.sh
 
 raw_dir="../0_Raw_data"
 unm_dir="../Unmerged_reads"
