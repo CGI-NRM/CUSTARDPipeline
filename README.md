@@ -44,7 +44,7 @@ This will create a log file and write merged files into `CUSTARDPipeline/1_Merge
 
 ## Step 2 - Trim data
 
-### Trim primers
+### Step A: Trim primers
 In order to trim the data in your `CUSTARDPipeline/1_Merged_data/` you use slightly different settings depending on previous choices.
 
 #### Data not in chunks and paired-ended
@@ -66,7 +66,7 @@ cd CUSTARDPipeline/2_Filtered_data/ # move into correct directory
 uv run ./run_individual_chunks.sh
 ```
 
-### Trim SNPs
+### Step B: Trim SNPs
 
 #### Data not in chunks
 ```bash
