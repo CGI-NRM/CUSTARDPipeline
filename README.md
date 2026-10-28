@@ -25,7 +25,7 @@ bash split_into_chunks.sh # splits samples into chunks of 100, edit if another n
 ```
 
 ## Step 1 - Merge data (if pair-ended)
-If your data i pair-ended, merge your ends by running:
+If your data i pair-ended, merge your ends by running (works no matter if you have split your samples into chunks or not):
 ```bash
 cd CUSTARDPipeline/1_Merged_data/ # move into correct directory
 bash merge_all_pairs.sh
