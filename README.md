@@ -2,13 +2,13 @@
 **C**GI **U**rsus **S**NP-based **T**rimming **A**nalysing **R**ecording and **D**ocumenting **Pipeline**
 
 ## Dependecies
-To handle python dependencies properly the package uv is used. It needs to be installed and will then recognise project files and pull down needed packages. It is installed in a few different ways depending on system:
+In order to handle python dependencies properly the package uv is used. It needs to be installed and will then recognise project files and pull down needed packages. It is installed in a few different ways depending on system:
 ```bash
 sudo pacman -S uv # Arch
 pamac install uv # Manjaro
 
-curl -LsSf https://astral.sh/uv/install.sh | sh # other distros, using curl (refresh terminal)
-wget -qO- https://astral.sh/uv/install.sh | sh # other distros, using wget (refresh terminal)
+curl -LsSf https://astral.sh/uv/install.sh | sh # other distros, with curl (refresh terminal)
+wget -qO- https://astral.sh/uv/install.sh | sh # other distros, with wget (refresh terminal)
 ```
 
 Step 1 also requires that there is a folder in the users home directory called `tools` and that it contains the BBTools package (silly, I know). You can make this happen by doing the following:
