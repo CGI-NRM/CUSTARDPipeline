@@ -80,3 +80,11 @@ First edit `run_individual_chunks_SNPs.sh` and uncomment/modify which chunks to 
 ```bash
 uv run ./run_individual_chunks_SNPs.sh
 ```
+
+## Step 3 Genotype samples
+
+### Data in chunks
+```bash
+cd CUSTARDPipeline/3_genotyped_SNPs/ # move into correct directory
+uv run ./loop_over_chunks.sh ../2_Filtered_data/
+```
