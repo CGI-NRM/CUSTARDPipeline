@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # $ bash split_into_chunks.sh
 
 counter=0
