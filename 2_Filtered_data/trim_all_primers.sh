@@ -1,18 +1,18 @@
 # Usage:
-# bash cutadapt_script.sh single Raw_data/
-# bash cutadapt_script.sh merged Merged_data/
-# bash cutadapt_script.sh chunk Merged_data/chunk_[n]
+# bash trim_all_primers.sh single Primers/primers.fa
+# bash trim_all_primers.sh merged Primers/primers.fa
+# bash trim_all_primers.sh chunk Primers/primers.fa ../Merged_data/chunk_[n]
 
 # Specify data:
 data_type=$1 # the first terminal argument will be taken as data type (single, merged or chunk)
 if [[ $data_type == "single" ]] # if single ended data
 then
-  dataset="Raw_data/*.fastq.gz"
-  outdir="Filtered_data/"
+  dataset="../Raw_data/*.fastq.gz"
+  outdir="../Filtered_data/"
 elif [[ $data_type == "merged" ]] # if merged data
 then
   dataset=""Merged_data/*.merged.fq.gz""
-  outdir="Filtered_data/"
+  outdir="../Filtered_data/"
 elif [[ $data_type == "chunk" ]] # if merged chunk data
 then
   dataset=""$3/*.merged.fq.gz""
@@ -22,6 +22,9 @@ fi
 
 # Specify primer file:
 primers=$2 # the second terminal argument will be taken as primer file path
+
+# Specify file path:
+
 
 # Trim primers and create a file for each locus:
 trim_primers ()
@@ -33,4 +36,4 @@ trim_primers ()
   done
 }
 
-trim_primers $primers "$dataset" | tee cutadapt$3_log.out
+trim_primers $primers "$dataset" | tee "cutadapt"$dataset"_log.out"
