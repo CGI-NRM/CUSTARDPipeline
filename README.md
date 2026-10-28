@@ -14,7 +14,8 @@ wget -qO- https://astral.sh/uv/install.sh | sh # other distros, with wget (refre
 Step 1 also requires that there is a folder in the users home directory called `tools` and that it contains the BBTools package (silly, I know). You can make this happen by doing the following:
 ```bash
 cd # move into home directory
-mkdir tools cd tools/
+mkdir tools
+cd tools/
 git clone https://github.com/bbushnell/BBTools
 ```
 Or edit `CUSTARDPipeline/1_Merged_data/merge_all_pairs.sh` if you have bbmerge.sh installed somewhere else (or in your path).
