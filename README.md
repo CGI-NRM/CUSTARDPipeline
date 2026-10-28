@@ -38,7 +38,7 @@ In order to trim the data in your `CUSTARDPipeline/1_Merged_data/` you use sligh
 ### Data not in chunks and paired-ended
 ```bash
 cd CUSTARDPipeline/2_Filtered_data/ # move into correct directory
-uv run ./trim_all_primers.sh paired Primers/Bear_SNP_all_loci_current.fa
+uv run ./trim_all_primers.sh merged Primers/Bear_SNP_all_loci_current.fa
 ```
 
 ### Data not in chunks and single-ended
