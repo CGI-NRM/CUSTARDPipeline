@@ -13,9 +13,9 @@ do
   then
     cur_time=`date`
     echo " - Genotyping files in "$snp_folder". ("$cur_time")"
-    python ./snpotypewriter.py $snp_folder > $chunk_name"_genotypes.csv" "genotype"
+    python ./snpotypewriter.py $snp_folder "genotype" > $chunk_name"_genotypes.csv"
     echo " - Calculating depths in "$snp_folder". ("$cur_time")"
-    python ./snpotypewriter.py $snp_folder > $chunk_name"_depths.csv" "depth"
+    python ./snpotypewriter.py $snp_folder "depth" > $chunk_name"_depths.csv"
   else
     echo " - No SNP folder found."
   fi
