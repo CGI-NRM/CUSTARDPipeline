@@ -65,6 +65,7 @@ def recurring_csv(gt_dict, print_order_list, out_string):
 min_reads = 10
 min_het_perc = 20
 data_folder = sys.argv[1] # folder containing fastq files
+setting_flag = sys.argv[2] # genotype or depth
 
 # Get names of files and samples:
 all_fastq_files = [i for i in os.listdir(data_folder) if i.endswith('fastq.gz')]
@@ -83,7 +84,11 @@ for i in all_samples:
     for j in all_fastq_files:
         if i in j:
             sample_dict[j.split('_')[0]] = calculate_allele_dict(j)
-    sample_genotypes = {}
-    for cur_locus_key in sample_dict.keys():
-        sample_genotypes[cur_locus_key] = determine_genotype(sample_dict[cur_locus_key])
-    print(i.split('BMK')[0] + ',' + recurring_csv(sample_genotypes, full_loci_list.copy(), 'EMPTY'))
+    if setting_flag == 'genotype':
+        sample_genotypes = {}
+        for cur_locus_key in sample_dict.keys():
+            sample_genotypes[cur_locus_key] = determine_genotype(sample_dict[cur_locus_key])
+        print(i.split('BMK')[0] + ',' + recurring_csv(sample_genotypes, full_loci_list.copy(), 'EMPTY'))
+    elif setting_flag == 'depth':
+        depth_dict = {i:str(sum([int(j) for j in sample_dict[i].values()])) for i in sample_dict.keys()}
+        print(i.split('BMK')[0] + ',' + recurring_csv(depth_dict, full_loci_list.copy(), 'EMPTY'))
