@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Usage (note, it assumes that subfolders are prefixed with "chunk_"):
-# bash loop_over_chunks.sh ../Filtered_data/
+# $ uv run ./loop_over_chunks.sh
 
-for cur_folder in $1/chunk*
+for cur_folder in ../2_Filtered_data/chunk*
 do
   chunk_name=${cur_folder/*\/}
   cur_time=`date`
