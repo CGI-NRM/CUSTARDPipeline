@@ -14,6 +14,7 @@ do
     cur_time=`date`
     echo " - Genotyping files in "$snp_folder". ("$cur_time")"
     python ./snpotypewriter.py $snp_folder "genotype" > $chunk_name"_genotypes.csv"
+    cur_time=`date`
     echo " - Calculating depths in "$snp_folder". ("$cur_time")"
     python ./snpotypewriter.py $snp_folder "depth" > $chunk_name"_depths.csv"
   else
