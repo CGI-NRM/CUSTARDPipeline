@@ -1,0 +1,49 @@
+---
+title: "Untitled"
+format: html
+---
+
+# Load Plates and Depths:
+```{r}
+excelSampleFiles <- list.files("../map_2026/Bjorn2026/Data/", pattern = "SEP.xlsx", full.names = TRUE)
+
+loadedExcelFiles <- lapply(excelSampleFiles, function(x) {
+  splitx <- strsplit(x, "/")
+  endstringx <- unlist(splitx)[length(unlist(splitx))]
+  endstringx <- substr(endstringx, 1, 13)
+  return(cbind(endstringx, readxl::read_excel(x))[, 1:5])})
+
+allExcelSampleFiles <- do.call(rbind, loadedExcelFiles)
+
+parseDepth <- function(genotypePath = "CUSTARDPipeline/3_Genotyped_SNPs/") {
+  depthCsvFiles <- list.files(genotypePath, pattern = "depths.csv", full.names = TRUE)
+  loadedFiles <- lapply(depthCsvFiles, read.table, sep = ',', header = TRUE, check.names = FALSE)
+  loadedDepths <- cbind(Status = 'Loaded', do.call(rbind, loadedFiles))
+  loadedDepths[is.na(loadedDepths)] <- ''
+  loadedDepths$Sample <- toupper(loadedDepths$Sample)
+  loadedDepths$Status[duplicated(loadedDepths$Sample)] <- "Duplicated" # mark duplications of names # moved up
+  loadedDepths$Status[grepl("NEGATIVE|POSITIVE", loadedDepths$Sample)] <- "Control" # mark controls # moved down
+  return(loadedDepths)
+}
+
+allDepths <- parseDepth()
+allDepths <- cbind(Plate = allExcelSampleFiles$endstringx[match(allDepths$Sample, allExcelSampleFiles$SEP)], allDepths)
+allDepths <- allDepths[!is.na(allDepths$Plate), ]
+
+allPlateMeans2 <- data.frame()
+for(i in colnames(allDepths)[-c(1, 2, 99)]) {
+  curPlate <- lapply(unique(allDepths$Plate), function(x) {c(x, mean(allDepths[allDepths$Plate == x, i]))})
+  curPlateRow <- do.call(cbind, lapply(curPlate, `[[`, 2))
+  colnames(curPlateRow) <- lapply(curPlate, `[[`, 1)
+  allPlateMeans2 <- rbind(allPlateMeans2, cbind(Locus = i, curPlateRow))
+}
+allPlateMeans2[, -c(1)] <- lapply(allPlateMeans2[, -c(1)], as.numeric)
+allPlateMeans2$AllMean <- apply(allPlateMeans2[, -c(1)], 1, mean)
+allPlateMeans2$AllVar <- apply(allPlateMeans2[, -c(1, 50)], 1, var)
+
+options(scipen = 999)
+# hist(allPlateMeans2$AllMean, breaks = 100)
+hist(allPlateMeans2$AllMean, breaks = 100, main = "Mean Read Depth Per Locus 2025", xlab = "Mean Reads", ylab = "Number Of Loci")
+
+writexl::write_xlsx(x = allPlateMeans2, path = "../mean_reads_of_loci_over_plates_bears_20XX_SNP2.xlsx")
+```
