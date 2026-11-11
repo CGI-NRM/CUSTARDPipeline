@@ -105,7 +105,7 @@ finalGenotypes <- processedGenotypes
 
 # Rerun analysis without noted samples:
 loadedDataFilt <- LoadAMData(finalGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
-uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = loadedDataFilt$AlleleKey, alleleMismatch = mmCutoff) # use stringent 10
+uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = loadedDataFilt$AlleleKey, alleleMismatch = mmCutoff)
 
 # Save results as report as well as csv-file:
 allelematch::summary.amUnique(object = uniqueBearsFilt, html = paste0("unique_bears_filt_", mmCutoff, "_v1.html"))
