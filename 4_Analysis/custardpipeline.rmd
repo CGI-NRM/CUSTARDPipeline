@@ -66,9 +66,8 @@ uniqueBearsAll <- allelematch::amUnique(loadedDataAll$Data, multilocusMap = load
 allelematch::summary.amUnique(object = uniqueBearsAll, html = paste0("unique_bears_all_", mmCutoff, "_v1.html"))
 allelematch::summary.amUnique(object = uniqueBearsAll, csv = paste0("unique_bears_all_", mmCutoff, "_v1.csv"))
 
-# get clusters and high quality individuals:
+# get clusters:
 clustersAll <- lapply(uniqueBearsAll$pairwise, function(x) {x$match$index})
-samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # should this be placed after marking unclassified/multiplematched? To avoid to not keep orphans by mistake?
 
 # check each one and see if they contain any matched sample from '75' run, note all samples in any who doesn't
 GetOrphans <- function(hiqSamples, allClusters) {
@@ -84,6 +83,9 @@ GetOrphans <- function(hiqSamples, allClusters) {
 # Mark unclassified and multiplematched samples from all run:
 processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$unclassified$index] <- "Unclassified"
 processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$multipleMatches$index] <- "MultipleMatched"
+
+# Get high quality individuals:
+samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # placed after marking unclassified/multiplematched to avoid to not keep orphans by mistake
 
 # Get orphaned samples and mark them:
 print(length(GetOrphans(hiqSamples = samples75, allClusters = clustersAll))) # number of newly added samples to be removed
